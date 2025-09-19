@@ -2,6 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Any, Dict, List, Optional
 
 from planner_singleton import FestPlanner
@@ -18,6 +19,18 @@ from scheduler_module import fetch_weather_summary
 load_dotenv()
 
 app = FastAPI(title="Travel AI Chatbot")
+
+# CORS 설정 - 프론트엔드에서 API 접근 허용
+# 개발환경과 프로덕션환경에 따라 설정 변경
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,  # 환경변수에서 허용 도메인 설정
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # ─────────────────────────────────────────────────────────
 # 간단 세션 저장소 (메모리)

@@ -147,6 +147,7 @@ pln/
 | `DEFAULT_NX` | ❌ | 기본 날씨 좌표 X (기본값: 92) |
 | `DEFAULT_NY` | ❌ | 기본 날씨 좌표 Y (기본값: 131) |
 | `ENABLE_PARKING_INFO` | ❌ | 주차장 정보 활성화 (기본값: true) |
+| `CORS_ORIGINS` | ❌ | CORS 허용 도메인 (기본값: *) |
 
 ### ⚠️ 날씨 기능 관련 안내
 
@@ -161,6 +162,23 @@ pln/
   - 별도의 Google Cloud Function을 배포해야 합니다
   - 한국 기상청 API를 사용하는 날씨 크롤링 서비스가 필요합니다
   - 또는 다른 날씨 API 서비스를 연동할 수 있습니다
+
+### 🌐 CORS 설정 안내
+
+**프론트엔드에서 API 호출시 CORS 오류가 발생하는 경우**:
+
+- **개발 환경**: `CORS_ORIGINS=*` (모든 도메인 허용)
+- **프로덕션 환경**: 특정 도메인만 허용
+  ```bash
+  CORS_ORIGINS=https://myapp.com,https://www.myapp.com,http://localhost:3000
+  ```
+
+**일반적인 프론트엔드 도메인 예시**:
+- React 개발서버: `http://localhost:3000`
+- Vue 개발서버: `http://localhost:8080`
+- Angular 개발서버: `http://localhost:4200`
+- Vercel 배포: `https://your-app.vercel.app`
+- Netlify 배포: `https://your-app.netlify.app`
 
 ## 🎮 사용 예시
 
