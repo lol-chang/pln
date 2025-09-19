@@ -133,11 +133,6 @@ pln/
 ├── llm.py                     # LLM 관련 함수들
 ├── request_models.py          # API 요청 모델들
 │
-├── cloud_function/            # 날씨 크롤링 Cloud Function
-│   ├── main.py
-│   ├── requirements.txt
-│   └── README.md
-│
 └── 강원특별자치도_강릉시_주차장정보_20230828.csv  # 주차장 데이터
 ```
 
@@ -147,11 +142,25 @@ pln/
 |--------|------|------|
 | `GOOGLE_API_KEY` | ✅ | Google Places API 키 |
 | `OPENAI_API_KEY` | ✅ | OpenAI API 키 |
-| `FUNCTION_URL` | ❌ | 날씨 크롤링 Cloud Function URL |
+| `FUNCTION_URL` | ❌ | 날씨 크롤링 Cloud Function URL ⚠️ |
 | `FUNCTION_AUDIENCE` | ❌ | Cloud Function 인증 정보 |
 | `DEFAULT_NX` | ❌ | 기본 날씨 좌표 X (기본값: 92) |
 | `DEFAULT_NY` | ❌ | 기본 날씨 좌표 Y (기본값: 131) |
 | `ENABLE_PARKING_INFO` | ❌ | 주차장 정보 활성화 (기본값: true) |
+
+### ⚠️ 날씨 기능 관련 안내
+
+**날씨 기반 대안 제안 기능**은 선택사항입니다:
+
+- **`FUNCTION_URL`이 설정되지 않은 경우**: 
+  - 날씨 기반 대안 제안이 비활성화됩니다
+  - 다른 모든 기능은 정상 작동합니다
+  - "비 오는 날 대안 확인해줘" → "날씨 정보를 가져올 수 없습니다" 메시지
+
+- **날씨 기능을 사용하려면**:
+  - 별도의 Google Cloud Function을 배포해야 합니다
+  - 한국 기상청 API를 사용하는 날씨 크롤링 서비스가 필요합니다
+  - 또는 다른 날씨 API 서비스를 연동할 수 있습니다
 
 ## 🎮 사용 예시
 
