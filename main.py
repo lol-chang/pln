@@ -61,7 +61,7 @@ def weather_summary(body: Dict[str, Any] = {}):
 
 
 @app.post("/rain/check")
-def rain_check(body: Dict[str, Any]):
+def rain_check(body: Dict[str, Any] = {}):
     try:
         plan: Dict[str, Any] = body.get("plan") or {}
         if not plan:
@@ -119,7 +119,7 @@ def rain_check(body: Dict[str, Any]):
 
 
 @app.post("/rain/apply")
-def rain_apply(body: Dict[str, Any]):
+def rain_apply(body: Dict[str, Any] = {}):
     try:
         plan: Dict[str, Any] = body.get("plan") or {}
         proposal: Dict[str, Any] = body.get("proposal") or {}
