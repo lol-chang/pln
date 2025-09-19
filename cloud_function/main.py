@@ -32,6 +32,7 @@ def parse_pcp(v: str) -> float:
     return 0.0
 
 
+
 def get_vilage_forecast_list(service_key: str, nx: int = 92, ny: int = 131) -> List[Dict[str, Any]]:
     KST = datetime.timezone(datetime.timedelta(hours=9))
     now = datetime.datetime.now(KST)
@@ -44,9 +45,11 @@ def get_vilage_forecast_list(service_key: str, nx: int = 92, ny: int = 131) -> L
         base_date = now.strftime("%Y%m%d")
         base_time = f"{max(h for h in base_hours if h <= now.hour):02d}00"
 
-    url = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+    base = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+    url = f"{base}?serviceKey={service_key}"  # 🔹 인코딩된 키를 URL에 직접 붙임
+
     params = {
-        "serviceKey": service_key,  # URL 인코딩된 키여도 OK
+        # "serviceKey": service_key,   # ❌ (삭제)
         "pageNo": "1",
         "numOfRows": "1000",
         "dataType": "JSON",
@@ -55,11 +58,12 @@ def get_vilage_forecast_list(service_key: str, nx: int = 92, ny: int = 131) -> L
         "nx": nx,
         "ny": ny,
     }
+
     res = requests.get(url, params=params, timeout=20)
     res.raise_for_status()
     data = res.json()
     items = data["response"]["body"]["items"]["item"]
-
+    
     mapping = {
         "TMP": ("temperature", safe_float),
         "PCP": ("rainfall", parse_pcp),
