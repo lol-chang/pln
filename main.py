@@ -94,6 +94,14 @@ def rain_check(body: Dict[str, Any] = {}):
             rainy_raw = [d for d, v in summary.items() if (v or {}).get("rain_condition") == 1]
             rainy_dates = sorted({_to_iso(d) for d in rainy_raw})
 
+        # 비가 안 오면 아무 것도 하지 않음
+        if not rainy_dates:
+            return {
+                "proposal": None,
+                "auto_rainy_dates": [],
+                "message": "no rain - no changes"
+            }
+
         places_client = get_google_places_client(api_key=os.getenv("GOOGLE_API_KEY"))
         proposal = build_rain_change_proposal(
             plan,
@@ -126,6 +134,9 @@ def rain_apply(body: Dict[str, Any] = {}):
         choices: List[Dict[str, int]] = body.get("choices") or []
         if not plan or not proposal:
             raise HTTPException(status_code=400, detail="plan and proposal are required")
+        # 제안에 후보가 없으면 원본 유지
+        if not (proposal.get("candidates") or []):
+            return plan
         new_plan = apply_user_choices(plan, proposal, choices)
         return new_plan
     except HTTPException:
