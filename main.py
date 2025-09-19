@@ -9,6 +9,8 @@ from request_models import PlanRequest
 from google_places_singleton import get_google_places_client
 from openai_singleton import get_openai_client
 from rain_change_proposal import build_rain_change_proposal, apply_user_choices
+from threading import RLock
+from llm import decide_replace_indices_gpt
 
 from scheduler_module import start_weather_scheduler, stop_weather_scheduler
 from scheduler_module import fetch_weather_summary
@@ -16,6 +18,13 @@ from scheduler_module import fetch_weather_summary
 load_dotenv()
 
 app = FastAPI(title="Travel AI Chatbot")
+
+# ─────────────────────────────────────────────────────────
+# 간단 세션 저장소 (메모리)
+# key: session_id → {"plan": plan_dict, "proposal": proposal_dict}
+# ─────────────────────────────────────────────────────────
+_SESSION_STORE: Dict[str, Dict[str, Any]] = {}
+_SESSION_LOCK = RLock()
 
 @app.on_event("startup")
 def _startup():
@@ -64,6 +73,7 @@ def weather_summary(body: Dict[str, Any] = {}):
 def rain_check(body: Dict[str, Any] = {}):
     try:
         plan: Dict[str, Any] = body.get("plan") or {}
+        session_id: Optional[str] = body.get("session_id")
         if not plan:
             raise HTTPException(status_code=400, detail="plan is required")
 
@@ -96,11 +106,16 @@ def rain_check(body: Dict[str, Any] = {}):
 
         # 비가 안 오면 아무 것도 하지 않음
         if not rainy_dates:
-            return {
+            out = {
                 "proposal": None,
                 "auto_rainy_dates": [],
                 "message": "no rain - no changes"
             }
+            # 세션이 있으면 plan만 저장
+            if session_id:
+                with _SESSION_LOCK:
+                    _SESSION_STORE[session_id] = {"plan": plan, "proposal": None}
+            return out
 
         places_client = get_google_places_client(api_key=os.getenv("GOOGLE_API_KEY"))
         proposal = build_rain_change_proposal(
@@ -116,30 +131,93 @@ def rain_check(body: Dict[str, Any] = {}):
             max_distance_km=max_distance_km,
         )
 
-        return {
-            "proposal": proposal,
-            "auto_rainy_dates": rainy_dates,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 세션 저장
+        if session_id:
+            with _SESSION_LOCK:
+                _SESSION_STORE[session_id] = {"plan": plan, "proposal": proposal}
+
+        return {"proposal": proposal, "auto_rainy_dates": rainy_dates}
 
 
-@app.post("/rain/apply")
-def rain_apply(body: Dict[str, Any] = {}):
+@app.post("/rain/llm-apply")
+def rain_llm_apply(body: Dict[str, Any] = {}):
+    """
+    입력:
+      - session_id: string (필수)
+      - user_message: string (필수)  예) "두 번째 후보로 바꿔줘"
+    동작:
+      - 세션에 저장된 plan/proposal을 불러오고
+      - proposal.candidates의 각 항목에서 2번째 대체(인덱스 1)를 뽑아 LLM에 판단 요청
+      - replace_indices를 choices로 환산하여 apply 후 전체 일정을 반환
+    """
     try:
-        plan: Dict[str, Any] = body.get("plan") or {}
-        proposal: Dict[str, Any] = body.get("proposal") or {}
-        choices: List[Dict[str, int]] = body.get("choices") or []
-        if not plan or not proposal:
-            raise HTTPException(status_code=400, detail="plan and proposal are required")
-        # 제안에 후보가 없으면 원본 유지
-        if not (proposal.get("candidates") or []):
+        session_id = (body or {}).get("session_id")
+        user_message = (body or {}).get("user_message")
+        if not session_id or not user_message:
+            raise HTTPException(status_code=400, detail="session_id and user_message are required")
+
+        with _SESSION_LOCK:
+            sess = _SESSION_STORE.get(session_id)
+        if not sess or not sess.get("plan"):
+            raise HTTPException(status_code=404, detail="session not found or plan missing")
+
+        plan = sess["plan"]
+        proposal = sess.get("proposal") or {}
+        candidates = proposal.get("candidates") or []
+        if not candidates:
+            # 후보가 없으면 원본 반환
             return plan
+
+        # (original, second_alt) 쌍 만들기
+        pairs = []
+        for c in candidates:
+            alts = c.get("alternatives") or []
+            if len(alts) >= 2:
+                pairs.append((c.get("original", {}), alts[1]))  # 두 번째 대안 기준
+        if not pairs:
+            return plan
+
+        replace_indices = decide_replace_indices_gpt(pairs, user_message)
+        # replace_indices는 pairs 기준 인덱스이므로, 실제 candidate index로 매핑
+        choices: List[Dict[str, int]] = []
+        pair_i = 0
+        for c in candidates:
+            alts = c.get("alternatives") or []
+            if len(alts) >= 2:
+                if pair_i in replace_indices:
+                    choices.append({"index": c.get("index"), "choice": 1})  # 두 번째 대안 적용
+                pair_i += 1
+
         new_plan = apply_user_choices(plan, proposal, choices)
+
+        # 세션에 업데이트 저장
+        with _SESSION_LOCK:
+            _SESSION_STORE[session_id] = {"plan": new_plan, "proposal": proposal}
         return new_plan
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# @app.post("/rain/apply")
+# def rain_apply(body: Dict[str, Any] = {}):
+#     try:
+#         plan: Dict[str, Any] = body.get("plan") or {}
+#         proposal: Dict[str, Any] = body.get("proposal") or {}
+#         choices: List[Dict[str, int]] = body.get("choices") or []
+#         if not plan or not proposal:
+#             raise HTTPException(status_code=400, detail="plan and proposal are required")
+#         # 제안에 후보가 없으면 원본 유지
+#         if not (proposal.get("candidates") or []):
+#             return plan
+#         new_plan = apply_user_choices(plan, proposal, choices)
+#         return new_plan
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
